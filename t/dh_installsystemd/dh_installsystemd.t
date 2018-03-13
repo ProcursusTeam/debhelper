@@ -204,6 +204,28 @@ each_compat_subtest {
 	unit_is_enabled('foo', 'source', 0);
 	unit_is_enabled('foo', 'target', 1);
 	ok(run_dh_tool('dh_clean'));
+
+	# --reload-after-upgrade flag, without --restart-after-upgrade
+	make_path('debian/foo/lib/systemd/system/');
+	ok(run_dh_tool('dh_installsystemd', '--reload-after-upgrade', '--no-restart-after-upgrade'));
+	my @reload_postinst = find_script('foo', 'postinst');
+	ok(@reload_postinst);
+	my $reload_matches = @reload_postinst ? grep { m{_dh_action=reload} } `cat @reload_postinst` : -1;
+	system("cp $reload_postinst[0] /tmp/foobar_$reload_matches");
+	ok($reload_matches == 1);
+	$reload_matches = @reload_postinst ? grep { m{_dh_action=(try-)?restart} } `cat @reload_postinst` : -1;
+	ok($reload_matches == 0);
+	ok(run_dh_tool('dh_clean'));
+
+	# --reload-after-upgrade flag, with --restart-after-upgrade
+	make_path('debian/foo/lib/systemd/system/');
+	ok(run_dh_tool('dh_installsystemd', '--reload-after-upgrade', '--restart-after-upgrade'));
+	@reload_postinst = find_script('foo', 'postinst');
+	ok(@reload_postinst);
+	$reload_matches = @reload_postinst ? grep { m{_dh_action=(try-)?reload-or-restart} } `cat @reload_postinst` : -1;
+	system("cp $reload_postinst[0] /tmp/foobar_$reload_matches");
+	ok($reload_matches == 1);
+	ok(run_dh_tool('dh_clean'));
 };
 
 each_compat_up_to_and_incl_subtest(11, sub {

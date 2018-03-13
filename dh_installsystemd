@@ -16,7 +16,7 @@ our $VERSION = DH_BUILTIN_VERSION;
 
 =head1 SYNOPSIS
 
-B<dh_installsystemd> [S<I<debhelper options>>] [B<--restart-after-upgrade>] [B<--no-stop-on-upgrade>] [B<--no-enable>] [B<--no-start>] [B<--name=>I<name>] [S<I<unit file> ...>]
+B<dh_installsystemd> [S<I<debhelper options>>] [B<--restart-after-upgrade> [B<--reload-after-upgrade>]] [B<--no-stop-on-upgrade>] [B<--no-enable>] [B<--no-start>] [B<--name=>I<name>] [S<I<unit file> ...>]
 
 =head1 DESCRIPTION
 
@@ -119,6 +119,19 @@ Undo a previous B<--restart-after-upgrade> (or the default of compat
 stopped in the F<prerm> script and started again in the F<postinst>
 script.
 
+=item B<--reload-after-upgrade>
+
+Attempt to reload the unit file after the package upgrade has been completed.
+When used in combination with B<--restart-after-upgrade>, the unit will be
+reloaded or restarted, depending on unit file contents and current unit state
+at time of upgrade.
+
+Reloading on upgrade is only recommended for units that support cleanly
+re-executing the upgraded version of their executed binaries as part of
+reloading. Units that only reload their configuration should use a regular
+restart or stop-start cycle for upgrading, to ensure the upgraded binaries are
+used.
+
 =item B<-r>, B<--no-stop-on-upgrade>, B<--no-restart-on-upgrade>
 
 Do not stop service on upgrade. This has the side-effect of not
@@ -172,6 +185,7 @@ init(options => {
 	"no-restart-on-upgrade" => \$dh{R_FLAG},
 	"no-start" => \$dh{NO_START},
 	"R|restart-after-upgrade!" => \$dh{RESTART_AFTER_UPGRADE},
+	"reload-after-upgrade" => \$dh{RELOAD_AFTER_UPGRADE},
 	"no-also" => \$dh{NO_ALSO}, # undocumented option
 });
 
@@ -420,11 +434,15 @@ foreach my $package (@{$dh{DOPACKAGES}}) {
 			my $snippet;
 			if ($dh{NO_START}) {
 				$snippet = 'postinst-systemd-restartnostart';
-				$replace->{RESTART_ACTION} = 'try-restart';
+				$replace->{RESTART_ACTION} = $dh{RELOAD_AFTER_UPGRADE} ? 'try-reload-or-restart' : 'try-restart';
 			} else {
 				$snippet = 'postinst-systemd-restart';
-				$replace->{RESTART_ACTION} = 'restart';
+				$replace->{RESTART_ACTION} = $dh{RELOAD_AFTER_UPGRADE} ? 'reload-or-restart' : 'restart';
 			}
+			autoscript($package, 'postinst', $snippet, $replace, \%options);
+		} elsif ($dh{RELOAD_AFTER_UPGRADE}) {
+			my $snippet = $dh{NO_START} ? 'postinst-systemd-restartnostart' : 'postinst-systemd-restart';
+			$replace->{RESTART_ACTION} = 'reload';
 			autoscript($package, 'postinst', $snippet, $replace, \%options);
 		} elsif (!$dh{NO_START}) {
 			# (stop|start) service (before|after) upgrade
