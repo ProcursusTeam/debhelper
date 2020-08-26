@@ -43,6 +43,11 @@ each_compat_subtest {
 	ok(rm_files('debian/testpackage.postinst.debhelper'));
 };
 
+sub subtest_error_ignore {
+	print("Ignoring error message @_\n");
+	return;
+}
+
 $ENV{'FOO'} = "test";
 my @SUBST_TEST_OK = (
 	['unchanged', 'unchanged'],
@@ -50,24 +55,27 @@ my @SUBST_TEST_OK = (
 	['raw dollar-sign ${}', 'raw dollar-sign $'],
 	['${Dollar}${Space}${Dollar}', '$ $'],
 	['Hello ${env:FOO}', 'Hello test'],
-	['Hello Wrong var ${foo:BAR}', undef, 'dh-lib.t: error: Cannot resolve variable "${foo:BAR}" in test' ],
+	['Hello Wrong var ${foo:BAR}', undef, undef, 'dh-lib.t: error: Cannot resolve variable "${foo:BAR}" in test' ],
+	['Hello Wrong var ignored ${foo:BAR}', 'Hello Wrong var ignored ${foo:BAR}', \&subtest_error_ignore ],
+	['Hello ${env:FOO} var ignored ${foo:BAR}', 'Hello test var ignored ${foo:BAR}', \&subtest_error_ignore ],
+	['Hello ignored ${foo:BAR} for ${env:FOO}', 'Hello ignored ${foo:BAR} for test', \&subtest_error_ignore ],
 	['${Dollar}{Space}${}{Space}', '${Space}${Space}'],  # We promise that ${Dollar}/${} never cause recursion
 	['/usr/lib/${DEB_HOST_MULTIARCH}', '/usr/lib/' . dpkg_architecture_value('DEB_HOST_MULTIARCH')],
 );
 
 each_compat_subtest {
 	for my $test (@SUBST_TEST_OK) {
-		my ($input, $expected_output) = @{$test};
+		my ($input, $expected_output, $error_handler) = @{$test};
 		my $actual_output;
 
 		eval {
-			$actual_output = variable_substitution($input, 'test');
+			$actual_output = variable_substitution($input, 'test', $error_handler);
 			1;
 		} or do {
 			is ($expected_output, undef, "The expected output should be undefined on error");
 			$actual_output = $@;
 			$actual_output =~ s/^\s+|\s+$//g;
-			$expected_output = $test->[2];
+			$expected_output = $test->[3];
 		};
 
 		is($actual_output, $expected_output, qq{${input}" => "${actual_output}" (should be: "${expected_output})"});
