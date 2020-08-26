@@ -50,6 +50,7 @@ my @SUBST_TEST_OK = (
 	['raw dollar-sign ${}', 'raw dollar-sign $'],
 	['${Dollar}${Space}${Dollar}', '$ $'],
 	['Hello ${env:FOO}', 'Hello test'],
+	['Hello Wrong var ${foo:BAR}', undef, 'dh-lib.t: error: Cannot resolve variable "${foo:BAR}" in test' ],
 	['${Dollar}{Space}${}{Space}', '${Space}${Space}'],  # We promise that ${Dollar}/${} never cause recursion
 	['/usr/lib/${DEB_HOST_MULTIARCH}', '/usr/lib/' . dpkg_architecture_value('DEB_HOST_MULTIARCH')],
 );
@@ -57,7 +58,18 @@ my @SUBST_TEST_OK = (
 each_compat_subtest {
 	for my $test (@SUBST_TEST_OK) {
 		my ($input, $expected_output) = @{$test};
-		my $actual_output = Debian::Debhelper::Dh_Lib::_variable_substitution($input, 'test');
+		my $actual_output;
+
+		eval {
+			$actual_output = Debian::Debhelper::Dh_Lib::_variable_substitution($input, 'test');
+			1;
+		} or do {
+			is ($expected_output, undef, "The expected output should be undefined on error");
+			$actual_output = $@;
+			$actual_output =~ s/^\s+|\s+$//g;
+			$expected_output = $test->[2];
+		};
+
 		is($actual_output, $expected_output, qq{${input}" => "${actual_output}" (should be: "${expected_output})"});
 	}
 };
