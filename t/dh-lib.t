@@ -61,7 +61,7 @@ each_compat_subtest {
 		my $actual_output;
 
 		eval {
-			$actual_output = Debian::Debhelper::Dh_Lib::_variable_substitution($input, 'test');
+			$actual_output = variable_substitution($input, 'test');
 			1;
 		} or do {
 			is ($expected_output, undef, "The expected output should be undefined on error");

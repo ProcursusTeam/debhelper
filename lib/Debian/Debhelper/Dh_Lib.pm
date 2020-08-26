@@ -151,6 +151,8 @@ qw(
 	glob_expand_error_handler_warn_and_discard
 	glob_expand_error_handler_silently_ignore
 	glob_expand_error_handler_reject_nomagic_warn_discard
+
+	variable_substitution
 ),
 	# Generate triggers, substvars, maintscripts, build-time temporary files
 qw(
@@ -1458,7 +1460,7 @@ my %BUILT_IN_SUBST = (
 	'Tab'          => "\t",
 );
 
-sub _variable_substitution {
+sub variable_substitution {
 	my ($text, $loc) = @_;
 	return $text if index($text, '$') < 0;
 	my $pos = -1;
@@ -1560,7 +1562,7 @@ sub filedoublearray {
 			if (ref($globdir)) {
 				my @patterns = split;
 				if ($expand_patterns) {
-					@patterns = map {_variable_substitution($_, $source_ref)} @patterns;
+					@patterns = map {variable_substitution($_, $source_ref)} @patterns;
 				}
 				push(@line, glob_expand($globdir, $error_handler, @patterns));
 			} else {
@@ -1572,7 +1574,7 @@ sub filedoublearray {
 				foreach (map { glob "$globdir/$_" } split) {
 					s#^$globdir/##;
 					if ($expand_patterns) {
-						$_ = _variable_substitution($_, $source_ref);
+						$_ = variable_substitution($_, $source_ref);
 					}
 					push @line, $_;
 				}
@@ -1581,7 +1583,7 @@ sub filedoublearray {
 		else {
 			@line = split;
 			if ($expand_patterns) {
-				@line = map {_variable_substitution($_, $source_ref)} @line;
+				@line = map {variable_substitution($_, $source_ref)} @line;
 			}
 		}
 		push @ret, [@line];

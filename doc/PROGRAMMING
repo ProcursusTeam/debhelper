@@ -420,6 +420,17 @@ on_items_in_parallel($item_list_ref, $code)
 
 	Keep in mind that the sub will always be run in a subprocess,
 	so it cannot update global state.
+variable_substitution($text, $location, $error_handler)
+	Performs a variable substitution on the selected text, calling
+	the $error_handler (error(), by default) using $location as debug
+	information.
+
+	The variables supported are documented in the "Substitutions in
+	debhelper config files" section of debhelper(7).
+
+	It's possible to ignore non-fatal substitution errors by passing an
+	empty $error_handler function, in such case the function will expand
+	all the known variables, while will ignore the other ones.
 
 Sequence Addons:
 ---------------
