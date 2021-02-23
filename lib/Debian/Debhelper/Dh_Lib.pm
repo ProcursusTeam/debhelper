@@ -1951,6 +1951,9 @@ sub _parse_debian_control {
 				}
 
 				$package_types{$package} = _strip_spaces($field_values{'package-type'} // 'deb');
+				if ($package_types{$package} eq 'udeb' and !defined($build_profiles)) {
+					$build_profiles = '<!noudeb>';
+				}
 				$package_arches{$package} = $arch;
 				$package_multiarches{$package} = _strip_spaces($field_values{'multi-arch'} // '');
 				$package_sections{$package} = _strip_spaces($field_values{'section'} // $source_section);;
