@@ -2629,6 +2629,25 @@ sub set_buildflags {
 			$ENV{$flag} = $buildflags->get($flag);
 		}
 	}
+
+	# Set env vars and add specs file to LDFLAGS in order to add ELF note with
+	# package metadata to binaries compiled from the package(s) being built.
+	# https://systemd.io/COREDUMP_PACKAGE_METADATA/
+	my $specs = get_buildoption('notesspecs', '/usr/share/debhelper/debian-package-notes.specs');
+	if (-r $specs && get_buildoption('notes') && ! get_buildoption('nonotes')) {
+		isnative( $dh{MAINPACKAGE} ); # Necessary to have $dh{VERSION}
+		if (! exists $ENV{'DEB_SOURCE_PACKAGE_NAME'}) {
+			$ENV{'DEB_SOURCE_PACKAGE_NAME'} = sourcepackage();
+		}
+		if (! exists $ENV{'DEB_SOURCE_PACKAGE_VERSION'}) {
+			$ENV{'DEB_SOURCE_PACKAGE_VERSION'} = $dh{VERSION};
+		}
+		if (! exists $ENV{'LDFLAGS'}) {
+			$ENV{'LDFLAGS'} = '-specs=' . $specs;
+		} else {
+			$ENV{'LDFLAGS'} = $ENV{'LDFLAGS'} . ' ' . '-specs=' . $specs;
+		}
+	}
 }
 
 # Gets a DEB_BUILD_OPTIONS option, if set.
@@ -2638,8 +2657,10 @@ sub get_buildoption {
 	return $default if not exists($ENV{DEB_BUILD_OPTIONS});
 
 	foreach my $opt (split(/\s+/, $ENV{DEB_BUILD_OPTIONS})) {
-		# currently parallel= is the only one with a parameter
+		# currently parallel= and notesspecs= are the only ones with a parameter
 		if ($opt =~ /^parallel=(-?\d+)$/ && $wanted eq 'parallel') {
+			return $1;
+		} elsif ($opt =~ /^notesspecs=(\S*)$/ && $wanted eq 'notesspecs') {
 			return $1;
 		} elsif ($opt =~ m/^dherroron=(\S*)$/ && $wanted eq 'dherroron') {
 			my $value = $1;
