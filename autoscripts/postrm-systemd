@@ -4,10 +4,14 @@ if [ "$1" = "remove" ]; then
 	fi
 fi
 
-UNITFILES=#UNITFILES#
-if [ "$1" = "purge" ] && ! [ -e "/lib/systemd/system/$UNITFILES" ]; then
+if [ "$1" = "purge" ]; then
 	if [ -x "/usr/bin/deb-systemd-helper" ]; then
-		deb-systemd-helper purge #UNITFILES# >/dev/null || true
-		deb-systemd-helper unmask #UNITFILES# >/dev/null || true
+		for UFILE in #UNITFILES#
+		do
+			if ! [ -e "/lib/systemd/system/$UFILE" ]; then
+				deb-systemd-helper purge "$UFILE" >/dev/null || true
+				deb-systemd-helper unmask "$UFILE" >/dev/null || true
+			fi
+		done
 	fi
 fi
