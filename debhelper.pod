@@ -1136,8 +1136,8 @@ renaming, etc., the package will still need L<dh-exec(1)>.
 
 Please see L</Substitutions in debhelper config files> for syntax and
 available substitution variables.  To B<dh_*> tool writers, substitution
-expansion occurs as a part of the B<filearray> and B<filedoublearray>
-functions.
+expansion occurs calling B<variable_substitution> function or a part of
+the B<filearray> and B<filedoublearray> functions.
 
 =item -
 

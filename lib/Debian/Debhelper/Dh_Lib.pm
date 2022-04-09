@@ -156,6 +156,8 @@ qw(
 	glob_expand_error_handler_warn_and_discard
 	glob_expand_error_handler_silently_ignore
 	glob_expand_error_handler_reject_nomagic_warn_discard
+
+	variable_substitution
 ),
 	# Generate triggers, substvars, maintscripts, build-time temporary files
 qw(
@@ -1486,8 +1488,8 @@ my %BUILT_IN_SUBST = (
 	'Tab'          => "\t",
 );
 
-sub _variable_substitution {
-	my ($text, $loc) = @_;
+sub variable_substitution {
+	my ($text, $loc, $error_handler) = @_;
 	return $text if index($text, '$') < 0;
 	my $pos = -1;
 	my $subst_count = 0;
@@ -1496,6 +1498,7 @@ sub _variable_substitution {
 	my $expansion_size_limit = _VAR_SUBST_EXPANSION_DYNAMIC_EXPANSION_FACTOR_LIMIT * $current_size;
 	$expansion_size_limit = _VAR_SUBST_EXPANSION_MIN_SUPPORTED_SIZE_LIMIT
 		if $expansion_size_limit < _VAR_SUBST_EXPANSION_MIN_SUPPORTED_SIZE_LIMIT;
+	$error_handler = \&error if (not defined $error_handler);
 	1 while ($text =~ s<
 			\$\{([A-Za-z0-9][-_:0-9A-Za-z]*)\}  # Match ${something} and replace it
 		>[
@@ -1524,18 +1527,22 @@ sub _variable_substitution {
 				$value = $ENV{$env_var} //
 					error(qq{Cannot expand "\${${match}}" in ${loc} as the ENV variable "${env_var}" is unset});
 			}
-			error(qq{Cannot resolve variable "\${$match}" in ${loc}})
-				if not defined($value);
-			# We do not support recursive expansion.
-			$value =~ s/\$/\$\{\}/;
-			$current_size += length($value) - length($match) - 3;
-			if ($current_size > $expansion_size_limit) {
-				error("Refusing to expand \${${match}} in ${loc} - the original input seems to grow beyond reasonable'
-						 . ' limits!");
+			if (not defined $value) {
+				$error_handler->(qq{Cannot resolve variable "\${$match}" in ${loc}});
+				"\$~~{~~${match}~~}~~";
+			} else {
+				# We do not support recursive expansion.
+				$value =~ s/\$/\$\{\}/;
+				$current_size += length($value) - length($match) - 3;
+				if ($current_size > $expansion_size_limit) {
+					error("Refusing to expand \${${match}} in ${loc} - the original input seems to grow beyond reasonable'
+							. ' limits!");
+				}
+				$value;
 			}
-			$value;
 		]gex);
 	$text =~ s/\$\{\}/\$/g;
+	$text =~ s/\$~~\{~~([A-Za-z0-9][-_:0-9A-Za-z]*)~~\}~~/\$\{$1\}/g;
 
 	return $text;
 }
@@ -1588,7 +1595,7 @@ sub filedoublearray {
 			if (ref($globdir)) {
 				my @patterns = split;
 				if ($expand_patterns) {
-					@patterns = map {_variable_substitution($_, $source_ref)} @patterns;
+					@patterns = map {variable_substitution($_, $source_ref)} @patterns;
 				}
 				push(@line, glob_expand($globdir, $error_handler, @patterns));
 			} else {
@@ -1600,7 +1607,7 @@ sub filedoublearray {
 				foreach (map { glob "$globdir/$_" } split) {
 					s#^$globdir/##;
 					if ($expand_patterns) {
-						$_ = _variable_substitution($_, $source_ref);
+						$_ = variable_substitution($_, $source_ref);
 					}
 					push @line, $_;
 				}
@@ -1609,7 +1616,7 @@ sub filedoublearray {
 		else {
 			@line = split;
 			if ($expand_patterns) {
-				@line = map {_variable_substitution($_, $source_ref)} @line;
+				@line = map {variable_substitution($_, $source_ref)} @line;
 			}
 		}
 		push @ret, [@line];
