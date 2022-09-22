@@ -1,3 +1,9 @@
+debhelper (13.9.1~bpo11+1) bullseye-backports; urgency=medium
+
+  * Rebuild for bullseye-backports.
+
+ -- Anthony Fok <foka@debian.org>  Thu, 22 Sep 2022 02:17:41 -0600
+
 debhelper (13.9.1) unstable; urgency=medium
 
   [ Niels Thykier ]
