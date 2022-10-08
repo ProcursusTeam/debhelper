@@ -19,22 +19,26 @@ use constant BUILD_STEPS => qw(configure build test install clean);
 
 # Historical order must be kept for backwards compatibility. New
 # build systems MUST be added to the END of the list.
-our @BUILDSYSTEMS = (
-	"autoconf",
-	(! compat(7) ? "perl_build" : ()),
-	"perl_makemaker",
-	"makefile",
-	"python_distutils",
-	(compat(7) ? "perl_build" : ()),
-	"cmake+makefile",
-	"cmake+ninja",
-	"ant",
-	"qmake",
-	"qmake_qt4",
-	"meson+ninja",
-	"ninja",
-);
+sub _BUILT_IN_BUILD_SYSTEMS {
+	# This is in a sub to avoid invoking compat in package scope (triggers parsing of debian/control).
+	return (
+		"autoconf",
+		(! compat(7) ? "perl_build" : ()),
+		"perl_makemaker",
+		"makefile",
+		"python_distutils",
+		(compat(7) ? "perl_build" : ()),
+		"cmake+makefile",
+		"cmake+ninja",
+		"ant",
+		"qmake",
+		"qmake_qt4",
+		"meson+ninja",
+		"ninja",
+	);
+}
 
+# TODO: Remove in a future compat level.
 our @THIRD_PARTY_BUILDSYSTEMS = (
 	'maven',
 	'gradle',
@@ -115,11 +119,13 @@ sub load_buildsystem {
 	else {
 		# Try to determine build system automatically
 		my @buildsystems;
-		foreach $system (@BUILDSYSTEMS) {
+		foreach $system (_BUILT_IN_BUILD_SYSTEMS()) {
 			push @buildsystems, create_buildsystem_instance($system, 1, %opts);
 		}
 		if (!$system_options || $system_options->{'enable-thirdparty'}) {
+			my %ignore = map { $_ => 1 } Debian::Debhelper::Dh_Lib::_registered_build_systems();
 			foreach $system (@THIRD_PARTY_BUILDSYSTEMS) {
+				next if exists($ignore{$system});
 				push @buildsystems, create_buildsystem_instance($system, 0, %opts);
 			}
 		}
@@ -156,7 +162,7 @@ sub load_all_buildsystems {
 	}
 
 	# Standard debhelper build systems first
-	foreach my $name (@BUILDSYSTEMS) {
+	foreach my $name (_BUILT_IN_BUILD_SYSTEMS()) {
 		error("standard debhelper build system '$name' could not be found/loaded")
 		    if not exists $buildsystems{$name};
 		push @buildsystems, $buildsystems{$name};
@@ -184,8 +190,7 @@ sub load_all_buildsystems {
 sub buildsystems_init {
 	my %args=@_;
 
-	# Compat 10 defaults to --parallel by default
-	my $max_parallel = compat(9) ? 1 : -1;
+	my ($max_parallel, $reload_env);
 
 	# Available command line options
 	my %options = (
@@ -207,18 +212,21 @@ sub buildsystems_init {
 	    'no-parallel' => sub { $max_parallel = 1 },
 	    "max-parallel=i" => \$max_parallel,
 
-	    'reload-all-buildenv-variables' => sub {
-		Debian::Debhelper::Dh_Lib::reset_buildflags();
-	    },
+	    'reload-all-buildenv-variables' => \$reload_env,
 	);
-	if (compat(8)) {
-		# This option only works in compat 9+ where we actually set buildflags
-		$options{'reload-all-buildenv-variables'} = sub {
-			die("--reload-all-buildenv-variables only work reliably in compat 9+.\n");
-		};
-	}
 	$args{options}{$_} = $options{$_} foreach keys(%options);
+	$args{internal_parse_dh_sequence_info} = 1;
 	Debian::Debhelper::Dh_Lib::init(%args);
+
+	# Compat 10 defaults to --parallel by default
+	$max_parallel //= compat(9) ? 1 : -1;
+	if ($reload_env) {
+		# This option only works in compat 9+ where we actually set buildflags
+		if (compat(8)) {
+			error("--reload-all-buildenv-variables only work reliably in compat 9+.\n");
+		}
+		Debian::Debhelper::Dh_Lib::reset_buildflags();
+	}
 	Debian::Debhelper::Dh_Lib::setup_buildenv();
 	set_parallel($max_parallel);
 }
@@ -239,7 +247,10 @@ sub buildsystems_list {
 	my $step=shift;
 
 	my @buildsystems = load_all_buildsystems();
-	my %auto_selectable = map { $_ => 1 } @THIRD_PARTY_BUILDSYSTEMS;
+	my %auto_selectable = map { $_ => 1 } (
+		@THIRD_PARTY_BUILDSYSTEMS,
+		Debian::Debhelper::Dh_Lib::_registered_build_systems()
+	);
 	my $auto = autoselect_buildsystem($step, grep { ! $_->{thirdparty} || $auto_selectable{$_->NAME} } @buildsystems);
 	my $specified_text;
 

@@ -242,7 +242,7 @@ our $DEB822_FIELD_REGEX = qr/
 	    [\x21-\x39\x3B-\x7F]*                  # Subsequent characters (if any)
     /xoa;
 
-our $PARSE_DH_SEQUENCE_INFO = 0;
+our $PARSE_DH_FOO_BUILD_DEPENDS = 0;
 
 # We need logging in compat 9 or in override/hook targets (for --remaining-packages to work)
 # - This option is a global toggle to disable logs for special commands (e.g. dh or dh_clean)
@@ -254,7 +254,7 @@ sub init {
 	my %params=@_;
 
 	if ($params{internal_parse_dh_sequence_info}) {
-		$PARSE_DH_SEQUENCE_INFO = 1;
+		$PARSE_DH_FOO_BUILD_DEPENDS = 1;
 	}
 
 	# Check if we can by-pass the expensive Getopt::Long by optimising for the
@@ -1735,7 +1735,13 @@ sub samearch {
 # As a side effect, populates %package_arches and %package_types
 # with the types of all packages (not only those returned).
 my (%package_types, %package_arches, %package_multiarches, %packages_by_type,
-    %package_sections, $sourcepackage, %package_cross_type, %dh_bd_sequences);
+    %package_sections, $sourcepackage, %package_cross_type, %dh_bd_sequences,
+	%dh_build_systems,
+);
+
+sub _registered_build_systems {
+	return sort(keys(%dh_build_systems));
+}
 
 # Resets the arrays; used mostly for testing
 sub resetpackages {
@@ -1883,7 +1889,7 @@ sub _parse_debian_control {
 					error("Could not parse desired debhelper compat level from relation: $dep");
 				}
 				# Build-Depends on dh-sequence-<foo> OR dh-sequence-<foo> (<op> <version>)
-				if ($PARSE_DH_SEQUENCE_INFO and $dep =~ m/^dh-sequence-(${PKGNAME_REGEX})\s*(?:[(]\s*(?:[<>]?=|<<|>>)\s*(?:${PKGVERSION_REGEX})\s*[)])?(\s*[^\|]+[]>]\s*)?$/) {
+				if ($PARSE_DH_FOO_BUILD_DEPENDS and $dep =~ m/^dh-sequence-(${PKGNAME_REGEX})\s*(?:[(]\s*(?:[<>]?=|<<|>>)\s*(?:${PKGVERSION_REGEX})\s*[)])?(\s*[^\|]+[]>]\s*)?$/) {
 					my $sequence = $1;
 					my $has_profile_or_arch_restriction = $2 ? 1 : 0;
 					my $addon_type = $field2addon_type{$field};
@@ -1903,6 +1909,26 @@ sub _parse_debian_control {
 						next if not $dpkg_dep;
 					}
 					$dh_bd_sequences{$sequence} = $addon_type;
+				}
+				if ($PARSE_DH_FOO_BUILD_DEPENDS and $dep =~ m/^dh-build-system-(${PKGNAME_REGEX})\s*(?:[(]\s*(?:[<>]?=|<<|>>)\s*(?:${PKGVERSION_REGEX})\s*[)])?(\s*[^\|]+[]>]\s*)?$/) {
+					my $build_system = $1;
+					my $has_profile_or_arch_restriction = $2 ? 1 : 0;
+					if (not defined($field) or $field ne 'build-depends') {
+						error("The dh-build-system-${build_system} dependency is only supported in the Build-Deends field");
+					}
+					if (defined($dh_build_systems{$build_system})) {
+						error("Saw $dep multiple times (last time in $field).  However dh only support that build-"
+							. 'dependency at most once across all Build-Depends(-Arch|-Indep) fields');
+					}
+					if ($has_profile_or_arch_restriction) {
+						require Dpkg::Deps;
+						my $dpkg_dep = Dpkg::Deps::deps_parse($dep, build_profiles => \@profiles, build_dep => 1,
+							reduce_restrictions => 1);
+						# If dpkg reduces it to nothing, then it was not relevant for us after all
+						next if not $dpkg_dep;
+					}
+					$build_system =~ tr/-/_/;
+					$dh_build_systems{$build_system} = 1;
 				}
 			}
 		}

@@ -224,7 +224,7 @@ sub get_targetbuildsystem {
 # system auto-selection process, inside the root directory of the debian
 # source package. The current build step is passed as an argument.
 # Return 0 if the source is not buildable, or a positive integer
-# otherwise.
+# otherwise (generally, use 1 or 1 + the result of the SUPER call).
 #
 # Generally, it is enough to look for invariant unique build system
 # files shipped with clean source to determine if the source might
