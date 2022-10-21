@@ -346,6 +346,7 @@ my %COMMANDS = (
     'which-build-system'      => \&which_build_system,
     'detect-hook-targets'     => \&detect_hook_targets,
     'log-installed-files'     => \&log_installed_files_cmd,
+    'process-package-data'    => \&process_package_data,
 );
 
 my ($COMMAND) = shift(@ARGV);
@@ -551,6 +552,54 @@ sub log_installed_files_cmd {
         'package'   => $package,
         'tool_name' => $on_behalf_of,
     }, @ARGV);
+}
+
+sub process_package_data {
+    my ($mark_as_processed, @pkgconffiles);
+    init(
+        options => {
+            'on-behalf-of-cmd=s' => sub {$Debian::Debhelper::Dh_Lib::TOOL_NAME = $_[1];},
+            'mark-as-processed'  => \$mark_as_processed,
+            'config-file=s@'     => \@pkgconffiles,
+	        'doc-main-package=s' => \$dh{DOC_MAIN_PACKAGE},
+        },
+        inhibit_log => 1,
+    );
+    if (($mark_as_processed || $dh{EXCLUDE_LOGGED}) && $Debian::Debhelper::Dh_Lib::TOOL_NAME eq 'dh_assistant') {
+        error("The use of --remaining-packages/--mark-as-processed requires --on-behalf-of-cmd");
+    }
+    if ($mark_as_processed) {
+        $Debian::Debhelper::Dh_Lib::WRITE_LOG = 1;
+    }
+    my @package_data;
+    for my $package (getpackages()) {
+        my @config_files = map {
+            {
+                'basename'      => $_,
+                'concrete-file' => pkgfile($package, $_),
+            }
+        } @pkgconffiles;
+        push(@package_data, {
+            'package-name'                => $package,
+            'package-type'                => package_type($package),
+            'package-multiarch'           => package_multiarch($package),
+            'dh-cross-type'               => Debian::Debhelper::Dh_Lib::package_cross_type($package),
+            'cross-command-prefix'        => cross_command($package, ''),
+            'package-binary-architecture' => package_binary_arch($package),
+            'should-process'              => process_pkg($package) ? JSON::PP::true : JSON::PP::false,
+            'package-staging-directory'   => tmpdir($package),
+            'default-source-directory'    => default_sourcedir($package),
+            'main-doc-package'            => compute_doc_main_package($package),
+            'config-files'                => \@config_files,
+        });
+    }
+    my %results = (
+        'package-info'       => \@package_data,
+        'first-package'      => $dh{FIRSTPACKAGE},
+        'main-package'       => $dh{MAINPACKAGE},
+        'is-cross-compiling' => is_cross_compiling() ? JSON::PP::true : JSON::PP::false,
+    );
+    _output(\%results);
 }
 
 if (not defined($COMMAND)) {

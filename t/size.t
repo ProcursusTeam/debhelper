@@ -8,7 +8,8 @@ use warnings;
 use Test::More;
 
 my $binpath = $ENV{AUTOPKGTEST_TMP} ? '/usr/bin' : '.';
-my @progs=grep { -x $_ } glob("$binpath/dh_*");
+# dh_assistant is (like dh) not a regular debhelper tool.
+my @progs = grep { -x $_ and $_ ne 'dh_assistant' } glob("$binpath/dh_*");
 
 plan(tests => (@progs + @progs));
 
