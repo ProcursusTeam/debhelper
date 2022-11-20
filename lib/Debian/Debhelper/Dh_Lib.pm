@@ -719,8 +719,33 @@ sub mkdirs {
 
 sub install_dir {
 	my @dirs = @_;
-	my $maybe_chown = (defined($main::VERSION) && $main::VERSION eq DH_BUILTIN_VERSION) ? 1 : 0;
-	return _mkdirs($maybe_chown, @dirs);
+	if (compat(14) && (! defined($main::VERSION) || $main::VERSION ne DH_BUILTIN_VERSION)) {
+		my (@mkdirs, @install_dir);
+		state $warn_once;
+		require Cwd;
+		my $cwd = Cwd::getcwd();
+		my $regex = qr{debian/(?:$PKGNAME_REGEX|[.]debhelper/$PKGNAME_REGEX/dbgsym-root)(?:/.*)?};
+		for my $dir (@dirs) {
+			if ($dir =~ m{^${$regex}$}o or $dir =~ m{^\Q${cwd}\E/${regex}$}) {
+				push(@install_dir, $dir);
+			} else {
+				if (not $warn_once) {
+					warning('Possible bug: install_dir should only be used for staging directories (e.g., debian/<pkg>/<dir>)');
+					warning('Please use mkdirs(@directories) instead for other directories.');
+					warning('In compat 14+, install_dir will no longer perform this check and the call may fail');
+					warning('as install_dir might attempt to chown these directories to root:root.');
+					warning('Note: This fallback check is not flawless and can have false positives (e.g., with exotic -P)');
+					warning('as well as false negatives (which may lead to wrong ownership in the final deb) for');
+					warning('packages that do not use "Rules-Requires-Root: no".');
+					$warn_once = 1;
+				}
+				push(@mkdirs, $dir);
+			}
+		}
+		mkdirs(@mkdirs) if @mkdirs;
+		@dirs = @install_dir;
+	}
+	return _mkdirs(1, @dirs);
 }
 
 sub rename_path {

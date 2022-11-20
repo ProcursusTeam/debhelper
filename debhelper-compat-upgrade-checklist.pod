@@ -44,6 +44,15 @@ binary packages being uploaded to the archive by mistake. With the new behaviour
 the B<single-binary> addon will detect the mismatch and warn the maintainer of what is
 about to happen.
 
+=item -
+
+The B<install_dir> function from the perl module B<Debian::Debhelper::Dh_Lib> no longer
+attempts to detect "misuse" and will always attempt to chown the created directories
+unless debhelper is run in "rootless" mode (per B<Rules-Requires-Root>).  This may
+cause some third-party debhelper tools to fail with an error that they cannot
+chown a directory due to lack of permissions.  In compat 14 and earlier, this flow
+would have triggered a warning since debhelper 13.11.
+
 =back
 
 =item v14
