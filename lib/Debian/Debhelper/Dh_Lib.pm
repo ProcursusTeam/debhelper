@@ -124,6 +124,7 @@ qw(
 	package_multiarch
 	package_section
 	package_arch
+	package_type
 	process_pkg
 	compute_doc_main_package
 	isnative
@@ -133,6 +134,7 @@ qw(
 qw(
 	basename
 	dirname
+	mkdirs
 	install_file
 	install_prog
 	install_lib
@@ -227,6 +229,7 @@ our $PKGVERSION_REGEX = qr/
                  (?: - [0-9A-Za-z.+:~]+ )*   # Optional debian revision (+ upstreams versions with hyphens)
                           /xoa;
 our $MAINTSCRIPT_TOKEN_REGEX = qr/[A-Za-z0-9_.+]+/o;
+our $TOOL_NAME = basename($0);
 
 # From Policy 5.1:
 #
@@ -374,7 +377,7 @@ sub END {
 	# expect.
 	return if not -f 'debian/control';
 	if (compat(9, 1) || $ENV{DH_INTERNAL_OVERRIDE}) {
-		write_log(basename($0), @{$dh{DOPACKAGES}});
+		write_log($TOOL_NAME, @{$dh{DOPACKAGES}});
 	}
 }
 
@@ -486,6 +489,35 @@ sub print_and_doit_noerror {
 	goto \&_doit;
 }
 
+sub _post_fork_setup_and_exec {
+	my ($close_stdin, $options, @cmd) = @_;
+	if (defined($options)) {
+		if (defined(my $dir = $options->{chdir})) {
+			if ($dir ne '.') {
+				chdir($dir) or error("chdir(\"${dir}\") failed: $!");
+			}
+		}
+		if ($close_stdin) {
+			open(STDIN, '<', '/dev/null') or error("redirect STDIN failed: $!");
+		}
+		if (defined(my $output = $options->{stdout})) {
+			open(STDOUT, '>', $output) or error("redirect STDOUT failed: $!");
+		}
+		if (defined(my $update_env = $options->{update_env})) {
+			while (my ($k, $v) = each(%{$update_env})) {
+				if (defined($v)) {
+					$ENV{$k} = $v;
+				} else {
+					delete($ENV{$k});
+				}
+			}
+		}
+	}
+	# Force execvp call to avoid shell.  Apparently, even exec can
+	# involve a shell if you don't do this.
+	exec { $cmd[0] } @cmd or error('exec (for cmd: ' . escape_shell(@cmd) . ") failed: $!");
+}
+
 sub _doit {
 	my (@cmd) = @_;
 	my $options = ref($cmd[0]) ? shift(@cmd) : undef;
@@ -499,29 +531,7 @@ sub _doit {
 	return 1 if $dh{NO_ACT};
 	my $pid = fork() // error("fork(): $!");
 	if (not $pid) {
-		if (defined($options)) {
-			if (defined(my $dir = $options->{chdir})) {
-				if ($dir ne '.') {
-					chdir($dir) or error("chdir(\"${dir}\") failed: $!");
-				}
-			}
-			open(STDIN, '<', '/dev/null') or error("redirect STDIN failed: $!");
-			if (defined(my $output = $options->{stdout})) {
-				open(STDOUT, '>', $output) or error("redirect STDOUT failed: $!");
-			}
-			if (defined(my $update_env = $options->{update_env})) {
-				while (my ($k, $v) = each(%{$update_env})) {
-					if (defined($v)) {
-						$ENV{$k} = $v;
-					} else {
-						delete($ENV{$k});
-					}
-				}
-			}
-		}
-		# Force execvp call to avoid shell.  Apparently, even exec can
-		# involve a shell if you don't do this.
-		exec { $cmd[0] } @cmd;
+		_post_fork_setup_and_exec(1, $options, @cmd) // error("Assertion error: sub should not return!");
 	}
 	return waitpid($pid, 0) == $pid && $? == 0;
 }
@@ -560,8 +570,12 @@ sub _format_cmdline {
 
 sub qx_cmd {
 	my (@cmd) = @_;
+	my $options = ref($cmd[0]) ? shift(@cmd) : undef;
 	my ($output, @output);
-	open(my $fd, '-|', @cmd) or error('fork+exec (' . escape_shell(@cmd) . "): $!");
+	my $pid = open(my $fd, '-|') // error('fork (for cmd: ' . escape_shell(@cmd) . ") failed: $!");
+	if ($pid == 0) {
+		_post_fork_setup_and_exec(0, $options, @cmd) // error("Assertion error: sub should not return!");
+	}
 	if (wantarray) {
 		@output = <$fd>;
 	} else {
@@ -617,66 +631,96 @@ sub error_exitcode {
 {
 	my $_loaded = 0;
 	sub install_file {
-		unshift(@_, 0644);
+		unshift(@_, 1, 0644);
 		goto \&_install_file_to_path;
 	}
 
 	sub install_prog {
-		unshift(@_, 0755);
+		unshift(@_, 1, 0755);
 		goto \&_install_file_to_path;
 	}
 	sub install_lib {
-		unshift(@_, 0644);
+		unshift(@_, 1, 0644);
 		goto \&_install_file_to_path;
 	}
 
 	sub _install_file_to_path {
-		my ($mode, $source, $dest) = @_;
+		my ($consider_using_root, $mode, $source, $dest) = @_;
 		if (not $_loaded) {
 			$_loaded++;
 			require File::Copy;
 		}
-		verbose_print(sprintf('install -p -m%04o %s', $mode, escape_shell($source, $dest)))
-			if $dh{VERBOSE};
+		my $use_root = !$consider_using_root && should_use_root();
+		if ($dh{VERBOSE}) {
+			my $install_opts = $use_root ? '-o 0 -g 0 ' : '';
+			verbose_print(sprintf('install -p %s-m%04o %s', $install_opts, $mode, escape_shell($source, $dest)))
+		}
 		return 1 if $dh{NO_ACT};
 		# "install -p -mXXXX foo bar" silently discards broken
 		# symlinks to install the file in place.  File::Copy does not,
 		# so emulate it manually.  (#868204)
 		if ( -l $dest and not -e $dest and not unlink($dest) and $! != ENOENT) {
-			error("unlink $dest failed: $!");
+			error("unlink(\"$dest\") failed: $!");
 		}
-		File::Copy::copy($source, $dest) or error("copy($source, $dest): $!");
-		chmod($mode, $dest) or error("chmod($mode, $dest): $!");
+		File::Copy::copy($source, $dest) or error("copy(\"$source\", \"$dest\"): $!");
+		chmod($mode, $dest) or error("chmod($mode, \"$dest\"): $!");
+		if ($use_root) {
+			chown(0, 0, $dest) or error("chown(0, 0, \"$dest\") failed: $!");
+		}
 		my (@stat) = stat($source);
 		error("stat($source): $!") if not @stat;
 		utime($stat[8], $stat[9], $dest)
-			or error(sprintf("utime(%d, %d, %s): $!", $stat[8] , $stat[9], $dest));
+			or error(sprintf("utime(%d, %d, \"%s\"): $!", $stat[8] , $stat[9], $dest));
 		return 1;
 	}
 }
 
-sub install_dir {
-	my @to_create = grep { not -d $_ } @_;
-	return if not @to_create;
+
+sub _mkdirs {
+	my ($maybe_chown, @dirs) = @_;
+	return if not @dirs;
+	my $do_chown = $maybe_chown && should_use_root();
+	if ($do_chown) {
+		# Use the real install for the case that requires root.  The error handling
+		# of File::Path for this case seems a bit too fragile for my liking.
+		# (E.g., chown failures are carp warnings rather than hard errors and
+		# intercepting them via the error parameter does not seem to work so well)
+		doit('install', '-m0755', '-o', '0', '-g', '0', '-d', @dirs);
+		return;
+	}
+	if (not $maybe_chown && $dh{VERBOSE}) {
+		verbose_print(sprintf('install -m0755 -d %s', escape_shell(@dirs)));
+	}
+	return 1 if $dh{NO_ACT};
 	state $_loaded;
 	if (not $_loaded) {
 		$_loaded++;
 		require File::Path;
 	}
-	verbose_print(sprintf('install -d %s', escape_shell(@to_create)))
-		if $dh{VERBOSE};
-	return 1 if $dh{NO_ACT};
+	my %opts = (
+		# install -d uses 0755 (no umask), make_path uses 0777 (& umask) by default.
+		# Since we claim to run install -d, then ensure the mode is correct.
+		'chmod' => 0755,
+	);
 	eval {
-		File::Path::make_path(@to_create, {
-			# install -d uses 0755 (no umask), make_path uses 0777 (& umask) by default.
-			# Since we claim to run install -d, then ensure the mode is correct.
-			'chmod' => 0755,
-		});
+		File::Path::make_path(@dirs, \%opts);
 	};
 	if (my $err = "$@") {
 		$err =~ s/\s+at\s+\S+\s+line\s+\d+\.?\n//;
 		error($err);
 	}
+	return;
+}
+
+sub mkdirs {
+	my @to_create = grep { not -d $_ } @_;
+	return _mkdirs(0, @to_create);
+}
+
+sub install_dir {
+	my @dirs = @_;
+	my $maybe_chown = (defined($main::VERSION) && $main::VERSION eq DH_BUILTIN_VERSION) ? 1 : 0;
+	return _mkdirs($maybe_chown, @dirs);
 }
 
 sub rename_path {
@@ -849,7 +893,7 @@ sub error {
 	my ($message) = @_;
 	# ensure the error code is well defined.
 	$! = 255;
-	die(_color(basename($0), 'bold') . ': ' . _color('error', 'bold red') . ": $message\n");
+	die(_color($TOOL_NAME, 'bold') . ': ' . _color('error', 'bold red') . ": $message\n");
 }
 
 # Output a warning.
@@ -857,7 +901,7 @@ sub warning {
 	my ($message) = @_;
 	$message //= '';
 
-	print STDERR _color(basename($0), 'bold') . ': ' . _color('warning', 'bold yellow') . ": $message\n";
+	print STDERR _color($TOOL_NAME, 'bold') . ': ' . _color('warning', 'bold yellow') . ": $message\n";
 }
 
 # Returns the basename of the argument passed to it.
@@ -1230,14 +1274,13 @@ sub autoscript {
 		}
 	}
 
-	if (-e $outfile && ($script eq 'postrm' || $script eq 'prerm')
-	   && !compat(5)) {
+	if (-e $outfile && ($script eq 'postrm' || $script eq 'prerm')) {
 		# Add fragments to top so they run in reverse order when removing.
 		if (not defined($sed) or ref($sed)) {
 			verbose_print("[META] Prepend autosnippet \"$filename\" to $script [${outfile}.new]");
 			if (not $dh{NO_ACT}) {
 				open(my $out_fd, '>', "${outfile}.new") or error("open(${outfile}.new): $!");
-				print {$out_fd} '# Automatically added by ' . basename($0) . "/${tool_version}\n";
+				print {$out_fd} '# Automatically added by ' . $TOOL_NAME . "/${tool_version}\n";
 				autoscript_sed($sed, $infile, undef, $out_fd);
 				print {$out_fd} "# End automatically added section\n";
 				open(my $in_fd, '<', $outfile) or error("open($outfile): $!");
@@ -1248,7 +1291,7 @@ sub autoscript {
 				close($out_fd) or error("close(${outfile}.new): $!");
 			}
 		} else {
-			complex_doit("echo \"# Automatically added by ".basename($0)."/${tool_version}\"> $outfile.new");
+			complex_doit("echo \"# Automatically added by ".$TOOL_NAME."/${tool_version}\"> $outfile.new");
 			autoscript_sed($sed, $infile, "$outfile.new");
 			complex_doit("echo '# End automatically added section' >> $outfile.new");
 			complex_doit("cat $outfile >> $outfile.new");
@@ -1258,13 +1301,13 @@ sub autoscript {
 		verbose_print("[META] Append autosnippet \"$filename\" to $script [${outfile}]");
 		if (not $dh{NO_ACT}) {
 			open(my $out_fd, '>>', $outfile) or error("open(${outfile}): $!");
-			print {$out_fd} '# Automatically added by ' . basename($0) . "/${tool_version}\n";
+			print {$out_fd} '# Automatically added by ' . $TOOL_NAME . "/${tool_version}\n";
 			autoscript_sed($sed, $infile, undef, $out_fd);
 			print {$out_fd} "# End automatically added section\n";
 			close($out_fd) or error("close(${outfile}): $!");
 		}
 	} else {
-		complex_doit("echo \"# Automatically added by ".basename($0)."/${tool_version}\">> $outfile");
+		complex_doit("echo \"# Automatically added by ".$TOOL_NAME."/${tool_version}\">> $outfile");
 		autoscript_sed($sed, $infile, $outfile);
 		complex_doit("echo '# End automatically added section' >> $outfile");
 	}
@@ -1333,7 +1376,7 @@ sub autoscript_sed {
                               }x;
 			print {$ofd} $line;
 		}
-		print {$ofd} '# Triggers added by ' . basename($0) . "/${tool_version}\n";
+		print {$ofd} '# Triggers added by ' . $TOOL_NAME . "/${tool_version}\n";
 		print {$ofd} "${trigger_type} ${trigger_target}\n";
 		close($ofd) or error("closing ${triggers_file}.new failed: $!");
 		close($ifd);
@@ -1350,7 +1393,7 @@ sub generated_file {
 	my $dir = "debian/.debhelper/generated/${package}";
 	my $path = "${dir}/${filename}";
 	$mkdirs //= 1;
-	install_dir($dir) if $mkdirs;
+	mkdirs($dir) if $mkdirs;
 	return $path;
 }
 
@@ -1372,7 +1415,7 @@ sub _update_substvar {
 	my $len = scalar(@lines);
 	push(@lines, $insert_logic->()) if $insert_logic;
 	$changed ||= $len != scalar(@lines);
-	if ($changed) {
+	if ($changed && !$dh{NO_ACT}) {
 		open(my $out, '>', "${substvar_file}.new") // error("open(${substvar_file}.new, \"w\"): $!");
 		for my $line (@lines) {
 			print {$out} "$line\n";
@@ -2162,16 +2205,23 @@ sub package_cross_type {
 	return $package_cross_type{$package} // 'host';
 }
 
+sub package_type {
+	my ($package) = @_;
+
+	if (! exists $package_types{$package}) {
+		warning "package $package is not in control info";
+		return DEFAULT_PACKAGE_TYPE;
+	}
+	return $package_types{$package};
+}
+
 # Return true if a given package is really a udeb.
 sub is_udeb {
 	my $package=shift;
 	
-	if (! exists $package_types{$package}) {
-		warning "package $package is not in control info";
-		return 0;
-	}
-	return $package_types{$package} eq 'udeb';
+	return package_type($package) eq 'udeb';
 }
+
 
 sub process_pkg {
 	my ($package) = @_;
@@ -2557,7 +2607,7 @@ sub setup_home_and_xdg_dirs {
 		XDG_DATA_DIRS
 		XDG_RUNTIME_DIR
 	);
-	install_dir(@paths);
+	mkdirs(@paths);
 	for my $envname (@clear_env) {
 		delete($ENV{$envname});
 	}
@@ -2653,7 +2703,7 @@ sub _executable_dh_config_file_failed {
 	# The interpreter did not like the file for some reason.
 	# Lets check if the maintainer intended it to be
 	# executable.
-	if (not is_so_or_exec_elf_file($source) and not _has_shbang_line($source)) {
+	if (not is_so_or_exec_elf_file($source) and not _has_shebang_line($source)) {
 		warning("${source} is marked executable but does not appear to an executable config.");
 		warning();
 		warning("If ${source} is intended to be an executable config file, please ensure it can");
@@ -2693,7 +2743,7 @@ sub install_dh_config_file {
 		# Set the mtime (and atime) to ensure reproducibility.
 		utime($sstat[9], $sstat[9], $target);
 	} else {
-		_install_file_to_path($mode, $source, $target);
+		_install_file_to_path(1, $mode, $source, $target);
 	}
 	return 1;
 }
@@ -2703,7 +2753,7 @@ sub restore_file_on_clean {
 	my $bucket_index = 'debian/.debhelper/bucket/index';
 	my $bucket_dir = 'debian/.debhelper/bucket/files';
 	my $checksum;
-	install_dir($bucket_dir);
+	mkdirs($bucket_dir);
 	if ($file =~ m{^/}) {
 		error("restore_file_on_clean requires a path relative to the package dir");
 	}
@@ -2811,8 +2861,14 @@ sub log_installed_files {
 	my ($package, @patterns) = @_;
 
 	return if $dh{NO_ACT};
+	my $tool = $TOOL_NAME;
+	if (ref($package) eq 'HASH') {
+		my $options = $package;
+		$tool = $options->{'tool_name'} // error('Missing mandatory "tool_name" option for log_installed_files');
+		$package = $options->{'package'} // error('Missing mandatory "package" option for log_installed_files');
+	}
 
-	my $log = generated_file($package, 'installed-by-' . basename($0));
+	my $log = generated_file($package, 'installed-by-' . $tool);
 	open(my $fh, '>>', $log) or error("open $log: $!");
 	for my $src (@patterns) {
 		print $fh "$src\n";
@@ -2868,7 +2924,7 @@ sub is_so_or_exec_elf_file {
 	return 1;
 }
 
-sub _has_shbang_line {
+sub _has_shebang_line {
 	my ($file) = @_;
 	open(my $fd, '<', $file) or error("open $file: $!");
 	my $line = <$fd>;

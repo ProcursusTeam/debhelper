@@ -41,10 +41,6 @@ sub _unit_check_user_enabled {
 	# enabled, but we do not want to include that in our count.
 	$matches = grep { m{^\t\tif deb-systemd-helper( --\w+)* --user was-enabled.*'\Q$unit'} } @postinst;
 	is($matches, $enabled, "$unit $verb enabled");
-
-	my @postrm = read_script($package, 'postrm');
-	$matches = grep { m{deb-systemd-helper( --\w+)* --user mask.*'\Q$unit'} } @postrm;
-	is($matches, $enabled, "$unit $verb masked");
 }
 
 sub _unit_check_user_started {
@@ -72,7 +68,7 @@ sub isnt_started { _unit_check_user_started(@_, 0); }
 each_compat_subtest {
 	my ($compat) = @_;
 	make_path('debian/foo/usr/lib/systemd/user/');
-	install_file('debian/foo.user.service', 'debian/foo/usr/lib/systemd/user/bar.service');
+	copy_file('debian/foo.user.service', 'debian/foo/usr/lib/systemd/user/bar.service');
 	ok(run_dh_tool('dh_installsystemduser'));
 	ok(-e 'debian/foo/usr/lib/systemd/user/foo.service');
 	is_enabled('foo', 'foo.service');
