@@ -1,3 +1,9 @@
+debhelper (13.11.1~bpo11+1) bullseye-backports; urgency=medium
+
+  * Rebuild for bullseye-backports.
+
+ -- Luca Boccassi <bluca@debian.org>  Sat, 26 Nov 2022 12:00:44 +0000
+
 debhelper (13.11.1) unstable; urgency=medium
 
   * Team upload.
