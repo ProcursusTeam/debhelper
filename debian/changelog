@@ -1,3 +1,11 @@
+debhelper (13.11.8~bpo12+1) bookworm-backports; urgency=medium
+
+  * Rebuild for bookworm-backports.
+  * Disable dh_movetousr.
+  * Revert: "systemd helpers: install units to /usr".
+
+ -- Helmut Grohne <helmut@subdivi.de>  Thu, 23 Nov 2023 17:03:32 +0100
+
 debhelper (13.11.8) unstable; urgency=medium
 
   * Team upload.
