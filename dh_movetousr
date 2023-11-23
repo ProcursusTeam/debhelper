@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/bin/true
 
 =head1 NAME
 
@@ -43,6 +43,8 @@ When the only affected type of file is B<systemd> units, consider using B<dh_ins
 For further information on the state of the transition refer to L<https://wiki.debian.org/UsrMerge>.
 
 B<dh_movetousr> shall be removed from B<debhelper> during B<forky+1> is release cycle.
+
+In B<bookworm> this helper is turned into a no-op in order to retain the file move moratorium.
 
 =head1 OPTIONS
 

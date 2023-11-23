@@ -1,10 +1,7 @@
 #!/usr/bin/perl
-# Enable dh_movetousr
+# Do not enable dh_movetousr for bookworm-backports
 
 use strict;
 use warnings;
-
-$ENV{DH_INTERNAL_MOVETOUSR_IS_ADDON} = '1';
-insert_before('dh_installdeb', 'dh_movetousr');
 
 1;
