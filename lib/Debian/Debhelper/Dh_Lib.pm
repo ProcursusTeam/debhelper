@@ -249,7 +249,7 @@ our $PARSE_DH_SEQUENCE_INFO = 0;
 # - This option is a global toggle to disable logs for special commands (e.g. dh or dh_clean)
 # It is initialized during "init".  This implies that commands that never calls init are
 # not dh_* commands or do not need the log
-my $write_log = undef;
+our $WRITE_LOG = undef;
 
 sub init {
 	my %params=@_;
@@ -360,18 +360,18 @@ sub init {
 	$dh{U_PARAMS} //= [];
 
 	if ($params{'inhibit_log'}) {
-		$write_log = 0;
+		$WRITE_LOG = 0;
 	} else {
 		# Only initialize if unset (i.e. avoid overriding an early call
 		# to inhibit_log()
-		$write_log //= 1;
+		$WRITE_LOG //= 1;
 	}
 }
 
 # Ensure the log is written if requested but only if the command was
 # successful.
 sub END {
-	return if $? != 0 or not $write_log;
+	return if $? != 0 or not $WRITE_LOG;
 	# If there is no 'debian/control', then we are not being run from
 	# a package directory and then the write_log will not do what we
 	# expect.
@@ -431,7 +431,7 @@ sub commit_override_log {
 }
 
 sub inhibit_log {
-	$write_log=0;
+	$WRITE_LOG=0;
 }
 
 # Pass it an array containing the arguments of a shell command like would
