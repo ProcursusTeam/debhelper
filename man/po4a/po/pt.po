@@ -10454,10 +10454,10 @@ msgstr "debian/I<pacote>.mime"
 #. type: textblock
 #: dh_installmime:30
 msgid ""
-"Installed into usr/lib/mime/packages/I<package> in the package build "
+"Installed into /usr/lib/mime/packages/I<package> in the package build "
 "directory."
 msgstr ""
-"Instalado para usr/lib/mime/packages/I<pacote> no directório de compilação "
+"Instalado para /usr/lib/mime/packages/I<pacote> no directório de compilação "
 "do pacote."
 
 #. type: =item

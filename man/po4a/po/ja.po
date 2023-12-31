@@ -9639,10 +9639,10 @@ msgstr "debian/I<package>.mime"
 #. type: textblock
 #: dh_installmime:30
 msgid ""
-"Installed into usr/lib/mime/packages/I<package> in the package build "
+"Installed into /usr/lib/mime/packages/I<package> in the package build "
 "directory."
 msgstr ""
-"パッケージビルドディレクトリ内の usr/lib/mime/packages/I<package> へインス"
+"パッケージビルドディレクトリ内の /usr/lib/mime/packages/I<package> へインス"
 "トールされます。"
 
 #. type: =item
