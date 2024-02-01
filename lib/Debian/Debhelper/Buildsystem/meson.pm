@@ -77,6 +77,7 @@ sub configure {
 	my $multiarch=dpkg_architecture_value("DEB_HOST_MULTIARCH");
 	push @opts, "--libdir=lib/$multiarch";
 	push(@opts, "--libexecdir=lib/$multiarch") if compat(11);
+	push @opts, "-Dauto_features=enabled";
 	# There was a behaviour change in Meson 1.2.0: previously
 	# byte-compilation wasn't supported, but since 1.2.0 it is on by
 	# default. We can only use this option to turn it off in versions
