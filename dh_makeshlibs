@@ -449,7 +449,7 @@ foreach my $package (@{$dh{DOPACKAGES}}) {
 	}
 
 	# Handle Provides: for the t64 transition
-	if ($package !~ /^lib.*t64$/) {
+	if ($package !~ /^lib.*t64\b/) {
 		next;
 	}
 	if (! -f "$tmp/DEBIAN/symbols" and ! -f "$tmp/DEBIAN/shlibs") {
@@ -467,7 +467,7 @@ foreach my $package (@{$dh{DOPACKAGES}}) {
 		my $compat = Debian::Debhelper::Dh_Lib::t64_compat_name($package);
 		if ($compat eq '') {
 			$compat = $package;
-			$compat =~ s/t64$//;
+			$compat =~ s/(.*)t64\b/$1/;
 		}
 		addsubstvar($package, "t64:Provides", $compat,
 		            "= $version");
