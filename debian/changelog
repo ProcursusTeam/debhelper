@@ -1,3 +1,10 @@
+debhelper (13.14) UNRELEASED; urgency=medium
+
+  * dh_makeshlibs: provide t64:Provides for library packages that retain a
+    suffix such as "-nss".
+
+ -- Michael Hudson-Doyle <mwhudson@debian.org>  Tue, 20 Feb 2024 10:40:54 +1300
+
 debhelper (13.13) unstable; urgency=medium
 
   * Add `debhelper-documentation` `debputy` plugin. This provides
