@@ -926,6 +926,29 @@ This value affects most B<dh_auto_*> tools directly. For commands
 provided by the debhelper package, it also causes the tools to act like
 the B<DH_QUIET> environment variable was non-empty.
 
+=item B<notes>
+
+This value will cause the official debhelper build systems to compile binaries
+with packaging metadata embedded in the B<.note.package> ELF header section.
+This follows the specification defined at
+L<https://systemd.io/COREDUMP_PACKAGE_METADATA/> and allows one to identify the
+source of an ELF file at a glance. The information will also be parsed out of
+coredump files and be attached to the system journal.
+This is implemented by passing a specs file via B<LDFLAGS> that the linker will
+use to embed the metadata. A default specs file is shipped with debhelper, and
+it can be overridden with an additional option.
+Disabled by default.
+
+=item B<notesspecs>
+
+By default, if B<notes> is enabled, the specs file installed at
+B</usr/share/debhelper/debian-package-notes.specs> will be used. If this option
+is specified with a path to an alternative specs file, it will be used instead.
+
+=item B<nonotes>
+
+Explicitly and forcefully disables the B<notes> option.
+
 =back
 
 Unknown flags are silently ignored.

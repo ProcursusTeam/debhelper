@@ -1,1 +1,2 @@
 usr/bin
+debian-package-notes.specs usr/share/debhelper/
