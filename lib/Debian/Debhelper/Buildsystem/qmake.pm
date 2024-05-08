@@ -8,6 +8,7 @@ package Debian::Debhelper::Buildsystem::qmake;
 
 use strict;
 use warnings;
+use File::Spec qw();
 use Debian::Debhelper::Dh_Lib qw(dpkg_architecture_value error is_cross_compiling);
 use parent qw(Debian::Debhelper::Buildsystem::makefile);
 
@@ -80,8 +81,31 @@ sub configure {
 	push @flags, "QMAKE_STRIP=:";
 	push @flags, "PREFIX=/usr";
 
+	# prepare the rest of the arguments
+	my @args_rest;
+	my $param_seen = 0;
+	while (my $arg = shift) {
+		if ($arg =~ /^-(?:o|config|spec|platform|xspec|xplatform|t|template|tp|template_prefix|unset|query)$/) {
+			push @args_rest, $arg;
+			push @args_rest, shift;
+		} elsif ($arg eq "-set") {
+			push @args_rest, $arg;
+			push @args_rest, shift;
+			push @args_rest, shift;
+		} elsif ($arg eq "--") {
+			unshift @_, "--";
+			last;
+		} elsif ($arg !~ /^-|=/ && -e File::Spec->rel2abs($arg, $this->get_sourcedir)) {
+			push @args_rest, File::Spec->rel2abs($arg, $this->get_sourcedir);
+			$param_seen = 1;
+		} else {
+			push @args_rest, $arg;
+		}
+	}
+	push @args_rest, $this->get_source_rel2builddir unless $param_seen;
+
 	$this->mkdir_builddir();
-	$this->doit_in_builddir($this->_qmake(), @options, @flags, @_);
+	$this->doit_in_builddir($this->_qmake(), @options, @flags, @args_rest, @_);
 }
 
 sub install {
