@@ -68,7 +68,6 @@ sub is_autotools_config_file {
 	return $is_autoconf_file;
 }
 
-
 =head1 SEE ALSO
 
 L<debhelper(7)>

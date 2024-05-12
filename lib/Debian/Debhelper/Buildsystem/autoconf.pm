@@ -8,7 +8,7 @@ package Debian::Debhelper::Buildsystem::autoconf;
 
 use strict;
 use warnings;
-use Debian::Debhelper::Dh_Lib qw(%dh dpkg_architecture_value get_buildoption sourcepackage compat);
+use Debian::Debhelper::Dh_Lib qw(%dh dpkg_architecture_value get_buildoption sourcepackage compat restore_file_on_clean);
 use parent qw(Debian::Debhelper::Buildsystem::makefile);
 
 sub DESCRIPTION {
@@ -25,6 +25,37 @@ sub check_auto_buildable {
 	# Handle configure explicitly; inherit the rest
 	return 1 if $step eq "configure";
 	return $this->SUPER::check_auto_buildable(@_);
+}
+
+sub backup_autotest_scripts {
+	# Backup Autotest `testsuite` scripts.
+	open(my $fd, '-|', 'find', '-mindepth', '1',
+		'-type', 'f', '-name', 'testsuite', '-print')
+		or error("Cannot run find -type f -name testsuite: $!");
+	while (my $filename = <$fd>) {
+		chomp($filename);
+		next if not is_autotest_file($filename);
+		restore_file_on_clean($filename);
+	}
+	close($fd);
+}
+
+sub is_autotest_file {
+	my ($file) = @_;
+	my $is_autotest_file = 0;
+
+	open(my $fd, '<', $file) or error("open $file for reading failed: $!");
+	while (my $line = <$fd>) {
+		chomp($line);
+		if ($line =~ m{^# Generated from testsuite.* by GNU Autoconf}) {
+			$is_autotest_file = 1;
+			last;
+		}
+		last if $. >= 10;
+	}
+	close($fd);
+
+	return $is_autotest_file;
 }
 
 sub configure {
@@ -85,6 +116,8 @@ sub configure {
 
 sub test {
 	my $this=shift;
+
+	backup_autotest_scripts();
 
 	my $parallel = $this->get_parallel();
 	my @autotest;
