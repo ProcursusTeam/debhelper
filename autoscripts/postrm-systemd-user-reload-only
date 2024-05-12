@@ -1,4 +1,4 @@
-if [ -z "${DPKG_ROOT:-}" ] && [ "$1" = remove ] && [ -d /run/systemd/system ] ; then
+if [ -z "$DPKG_ROOT" ] && [ "$1" = remove ] && [ -d /run/systemd/system ] ; then
 	# We reload user instances asynchronously here, as it's after a removal so
 	# it doesn't need to block until it completes, and we cannot rely on D-Bus
 	# being available as dbus-user-session is not a mandatory dependency
