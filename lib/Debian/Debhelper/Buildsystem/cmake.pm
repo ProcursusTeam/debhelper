@@ -137,6 +137,7 @@ sub configure {
 
 	# CMake doesn't respect CPPFLAGS, see #653916.
 	if ($ENV{CPPFLAGS} && ! compat(8)) {
+		$ENV{ASMFLAGS} .= ' ' . $ENV{CPPFLAGS};
 		$ENV{CFLAGS}   .= ' ' . $ENV{CPPFLAGS};
 		$ENV{CXXFLAGS} .= ' ' . $ENV{CPPFLAGS};
 	}
