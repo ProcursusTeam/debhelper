@@ -27,7 +27,7 @@ mime files into package build directories.
 
 =item debian/I<package>.mime
 
-Installed into usr/lib/mime/packages/I<package> in the package build
+Installed into /usr/lib/mime/packages/I<package> in the package build
 directory.
 
 =item debian/I<package>.sharedmimeinfo
